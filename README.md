@@ -23,8 +23,8 @@ A production-ready, secure two-person ephemeral chat application with WebRTC vid
 
 1. **Clone and install dependencies:**
 ```bash
-git clone <repository-url>
-cd ephemeral-chat-app
+git clone https://github.com/21MH1A0579/privatechat.git
+cd privatechat
 npm run install:all
 ```
 
@@ -187,8 +187,8 @@ vercel --prod
    ```
 3. **Clone and setup:**
    ```bash
-   git clone <your-repo>
-   cd ephemeral-chat-app
+   git clone https://github.com/21MH1A0579/privatechat.git
+   cd privatechat
    npm run install:all
    npm run build
    ```
@@ -278,6 +278,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Socket.IO for real-time communication
 - WebRTC for peer-to-peer video calling
 - Tailwind CSS for beautiful UI components
-- React team for the excellent framework#   p r i v a t e c h a t  
- #   p r i v a t e c h a t  
- 
+- React team for the excellent framework
