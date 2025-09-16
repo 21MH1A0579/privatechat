@@ -4,7 +4,7 @@ A production-ready, secure two-person ephemeral chat application with WebRTC vid
 
 ## 🚀 Features
 
-- **Secure Authentication**: Two secret keys (`Chaithu143` and `Geethu143`)
+- **Secure Authentication**: Two secret keys (`*********` and `*********`)
 - **Ephemeral Messaging**: Messages stored only in memory (max 10, FIFO)
 - **Seen-Once Messages**: Snapchat-style disappearing messages
 - **WebRTC Video Calls**: Peer-to-peer video calling with full controls
@@ -46,8 +46,8 @@ npm run dev
 
 5. **Open in two browser windows/tabs:**
    - Navigate to `http://localhost:5173` (or `https://localhost:5173` if HTTPS enabled)
-   - Login with `Chaithu143` in one window (logs in as Chaitanya)
-   - Login with `Geethu143` in another window (logs in as Geetha)
+   - Login with `*********` in one window (logs in as Chaitanya)
+   - Login with `*********` in another window (logs in as Geetha)
 
 ## 🔧 Configuration
 
@@ -79,7 +79,7 @@ For local development with HTTPS:
 
 ### Authentication
 - Only two users can connect simultaneously
-- Use secret keys: `Chaithu143` (logs in as Chaitanya) or `Geethu143` (logs in as Geetha)
+- Use secret keys: `*********` (logs in as Chaitanya) or `*********` (logs in as Geetha)
 - Sessions are short-lived with JWT tokens
 
 ### Messaging
@@ -278,6 +278,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Socket.IO for real-time communication
 - WebRTC for peer-to-peer video calling
 - Tailwind CSS for beautiful UI components
-- React team for the excellent framework#   p r i v a t e c h a t  
- #   p r i v a t e c h a t  
+- React team for the excellent framework#   p r i v a t e c h a t 
+ 
+ #   p r i v a t e c h a t 
+ 
  
