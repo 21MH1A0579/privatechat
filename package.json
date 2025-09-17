@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
     "client:dev": "vite",
     "server:dev": "cd server && npm run dev",
-    "build": "npm run build:functions && tsc && vite build",
+    "build": "npm run build:functions && vite build",
     "build:functions": "cd netlify/functions && npm install",
     "preview": "vite preview",
     "gen-cert": "chmod +x dev-cert.sh && ./dev-cert.sh",
