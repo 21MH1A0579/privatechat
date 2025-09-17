@@ -26,8 +26,10 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
       // The actual authentication will happen via socket in ChatRoom
       // Server will handle all validation
-      console.log(`🔐 Login form submitted with secret key: "${secretKey}"`);
+      console.log(`🔍 [LOGIN-FORM] User entered secret key: "${secretKey}" (length: ${secretKey.length})`);
+      console.log(`🔍 [LOGIN-FORM] About to call onLogin with: "${secretKey}"`);
       onLogin(secretKey);
+      console.log(`🔍 [LOGIN-FORM] onLogin called successfully`);
     } catch (err) {
       setError('Connection failed. Please try again.');
     } finally {

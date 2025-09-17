@@ -77,37 +77,58 @@ export class SocketHandler {
 
   private handleLogin(socket: Socket, data: { secretKey: string }): void {
     const startTime = Date.now();
+    console.log(`🔍 [SOCKET-LOGIN] Raw data received:`, JSON.stringify(data, null, 2));
+    console.log(`🔍 [SOCKET-LOGIN] Data type: ${typeof data}, Keys: ${Object.keys(data)}`);
+    
     try {
       const { secretKey } = data;
+      console.log(`🔍 [SOCKET-LOGIN] Extracted secretKey: "${secretKey}" (type: ${typeof secretKey})`);
+      
       this.log('info', `Login attempt`, {
         socketId: socket.id,
         timestamp: new Date().toISOString(),
-        secretKeyLength: secretKey.length
+        secretKeyLength: secretKey?.length || 0,
+        secretKeyValue: secretKey
       });
       
-      if (!this.authService.validateSecretKey(secretKey)) {
+      // Add explicit validation check with detailed logging
+      console.log(`🔍 [SOCKET-LOGIN] About to validate secret key: "${secretKey}"`);
+      const isValidKey = this.authService.validateSecretKey(secretKey);
+      console.log(`🔍 [SOCKET-LOGIN] Validation result: ${isValidKey}`);
+      
+      if (!isValidKey) {
         const duration = Date.now() - startTime;
+        console.log(`❌ [SOCKET-LOGIN] VALIDATION FAILED for "${secretKey}"`);
         this.log('warn', `Invalid secret key provided`, {
           socketId: socket.id,
           timestamp: new Date().toISOString(),
-          secretKeyLength: secretKey.length,
+          secretKeyLength: secretKey?.length || 0,
+          secretKeyValue: secretKey,
           duration: `${duration}ms`
         });
         socket.emit('login-error', { error: 'Invalid credentials' });
         return;
       }
 
+      console.log(`✅ [SOCKET-LOGIN] VALIDATION PASSED for "${secretKey}"`);
       const username = this.authService.getUsername(secretKey);
+      console.log(`🔍 [SOCKET-LOGIN] Username mapping: "${secretKey}" -> "${username}"`);
+      
       this.log('info', `Username mapped successfully`, {
         socketId: socket.id,
         timestamp: new Date().toISOString(),
         userId: username,
-        secretKeyLength: secretKey.length
+        secretKeyLength: secretKey.length,
+        secretKeyValue: secretKey
       });
       
       // Check if user is already connected
-      if (this.messageStore.hasConnection(username)) {
+      const hasConnection = this.messageStore.hasConnection(username);
+      console.log(`🔍 [SOCKET-LOGIN] User "${username}" already connected: ${hasConnection}`);
+      
+      if (hasConnection) {
         const duration = Date.now() - startTime;
+        console.log(`❌ [SOCKET-LOGIN] User "${username}" already connected`);
         this.log('warn', `User already connected`, {
           socketId: socket.id,
           timestamp: new Date().toISOString(),
@@ -119,26 +140,54 @@ export class SocketHandler {
       }
 
       // Check connection limit (max 2 users)
-      if (this.messageStore.getConnectionCount() >= 2) {
+      const connectionCount = this.messageStore.getConnectionCount();
+      console.log(`🔍 [SOCKET-LOGIN] Current connections: ${connectionCount}/2`);
+      
+      if (connectionCount >= 2) {
         const duration = Date.now() - startTime;
+        console.log(`❌ [SOCKET-LOGIN] Room is full (${connectionCount}/2)`);
         this.log('warn', `Room is full`, {
           socketId: socket.id,
           timestamp: new Date().toISOString(),
           userId: username,
-          currentConnections: this.messageStore.getConnectionCount(),
+          currentConnections: connectionCount,
           duration: `${duration}ms`
         });
         socket.emit('login-error', { error: 'Room is full' });
         return;
       }
 
+      console.log(`🔍 [SOCKET-LOGIN] Generating token for "${secretKey}"`);
       const token = this.authService.generateToken(secretKey);
+      console.log(`🔍 [SOCKET-LOGIN] Token generated (length: ${token.length})`);
+      
       this.connectedUsers.set(socket.id, username);
       this.messageStore.addConnection(username);
 
+      console.log(`✅ [SOCKET-LOGIN] SUCCESS: User "${username}" logged in with secret key: "${secretKey}"`);
       socket.emit('login-success', { token, user: username });
-      console.log(`✅ User ${username} logged in successfully with secret key: "${secretKey}"`);
-    } catch (error) {
+      
+      const duration = Date.now() - startTime;
+      this.log('info', `Login successful`, {
+        socketId: socket.id,
+        timestamp: new Date().toISOString(),
+        userId: username,
+        secretKeyValue: secretKey,
+        tokenLength: token.length,
+        duration: `${duration}ms`,
+        totalConnections: this.messageStore.getConnectionCount()
+      });
+      
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      console.error(`💥 [SOCKET-LOGIN] ERROR during login:`, error);
+      this.log('error', `Login error occurred`, {
+        socketId: socket.id,
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        stack: error.stack,
+        duration: `${duration}ms`
+      });
       socket.emit('login-error', { error: 'Authentication failed' });
     }
   }

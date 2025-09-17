@@ -5,6 +5,7 @@ import VideoCall from './VideoCall';
 import { SocketService } from '../services/SocketService';
 import { WebRTCService } from '../services/WebRTCService';
 import { Message } from '../types/Message';
+import { logger } from '../utils/Logger';
 
 interface ChatRoomProps {
   currentUser: string; // This will be the secret key initially
@@ -35,8 +36,12 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
     // Socket event listeners
     socketService.current.on('connect', () => {
       setIsConnected(true);
+      console.log(`🔍 [CHATROOM] Socket connected, about to login`);
+      console.log(`🔍 [CHATROOM] Secret key from props: "${secretKey}" (length: ${secretKey.length})`);
+      
       logger.info(COMPONENT, `Socket connected, attempting login`, {
-        secretKeyLength: secretKey.length
+        secretKeyLength: secretKey.length,
+        secretKeyValue: secretKey
       });
       socketService.current?.login(secretKey);
     });

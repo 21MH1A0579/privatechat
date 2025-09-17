@@ -147,11 +147,20 @@ export class SocketService {
       logger.error(SocketService.COMPONENT, `Cannot login - socket not connected`);
       return;
     }
+    
+    console.log(`🔍 [CLIENT-LOGIN] About to send login request`);
+    console.log(`🔍 [CLIENT-LOGIN] Secret key: "${secretKey}" (length: ${secretKey.length})`);
+    console.log(`🔍 [CLIENT-LOGIN] Socket ID: ${this.socket.id}`);
+    console.log(`🔍 [CLIENT-LOGIN] Data to send:`, { secretKey });
+    
     logger.info(SocketService.COMPONENT, `Sending login request`, {
       secretKeyLength: secretKey.length,
+      secretKeyValue: secretKey,
       socketId: this.socket.id
     });
+    
     this.socket.emit('login', { secretKey });
+    console.log(`🔍 [CLIENT-LOGIN] Login request sent`);
   }
 
   join(): void {
