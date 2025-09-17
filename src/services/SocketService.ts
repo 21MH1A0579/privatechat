@@ -2,7 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { AuthService } from './AuthService';
 import { logger } from '../utils/Logger';
 
-const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface MessageData {
   type: 'text' | 'image';

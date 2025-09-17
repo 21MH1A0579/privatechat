@@ -54,7 +54,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
       socketService.current?.join();
     });
 
-    socketService.current.on('login-error', ({ error }) => {
+    socketService.current.on('login-error', ({ error }: { error: string }) => {
       logger.error(COMPONENT, `Login failed`, { error });
       // Handle login error - redirect back to login form
       alert('Invalid credentials');

@@ -23,27 +23,40 @@ export class AuthService {
     logger.info(this.COMPONENT, `Attempting login with secret key (length: ${secretKey.length})`);
     
     try {
-      // First, try to connect to socket for authentication
+      // First, try to connect to health endpoint to check server availability
       logger.debug(this.COMPONENT, `Checking server health at ${API_BASE}/health`);
       const response = await fetch(`${API_BASE}/health`);
-      const duration = Date.now() - startTime;
       
       if (!response.ok) {
         logger.error(this.COMPONENT, `Server health check failed`, {
           status: response.status,
-          statusText: response.statusText,
-          duration
+          statusText: response.statusText
         });
         throw new Error('Server not available');
       }
-
+      
+      const duration = Date.now() - startTime;
       logger.apiCall(this.COMPONENT, 'GET', '/health', duration, response.status);
       logger.info(this.COMPONENT, `Login successful - server available`, { duration });
 
-      // Return success - actual authentication happens via socket
+      // Return success - actual authentication will happen via socket when available
+      // For now, just validate the secret key format locally
+      const validKeys = ['Chaithu143', 'Geethu143'];
+      if (!validKeys.includes(secretKey)) {
+        return {
+          success: false,
+          error: 'Invalid credentials'
+        };
+      }
+
+      const userMapping: Record<string, string> = {
+        'Chaithu143': 'Chaitanya',
+        'Geethu143': 'Geetha'
+      };
+
       return {
         success: true,
-        user: secretKey,
+        user: userMapping[secretKey],
         token: 'temp-token' // Temporary token, real one comes from socket
       };
     } catch (error: any) {
