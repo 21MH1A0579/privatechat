@@ -1,8 +1,5 @@
 {
   "name": "ephemeral-chat-netlify-functions",
   "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
-    "jsonwebtoken": "^9.0.2"
-  }
+  "type": "module"
 }
