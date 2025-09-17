@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { AuthService } from './AuthService';
+import { logger } from '../utils/Logger';
 
 const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -12,32 +13,49 @@ export interface MessageData {
 export class SocketService {
   private socket: Socket | null = null;
   private eventListeners: Map<string, Function[]> = new Map();
+  private static readonly COMPONENT = 'SocketService';
 
   connect(): void {
+    logger.info(SocketService.COMPONENT, `Connecting to server at ${SERVER_URL}`);
+    
     this.socket = io(SERVER_URL, {
       transports: ['websocket', 'polling'],
       timeout: 20000,
     });
 
     this.socket.on('connect', () => {
-      console.log('Connected to server');
+      logger.info(SocketService.COMPONENT, `Connected to server`, {
+        socketId: this.socket?.id,
+        transport: this.socket?.io.engine?.transport?.name
+      });
       this.emit('connect');
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('Disconnected from server');
+    this.socket.on('disconnect', (reason) => {
+      logger.warn(SocketService.COMPONENT, `Disconnected from server`, {
+        reason,
+        socketId: this.socket?.id
+      });
       this.emit('disconnect');
     });
 
     // Authentication events
     this.socket.on('login-success', ({ token, user }) => {
       AuthService.setToken(token);
-      console.log(`✅ Socket authentication successful! User: "${user}", Token: "${token}"`);
+      logger.setUserId(user);
+      logger.info(SocketService.COMPONENT, `Socket authentication successful`, {
+        user,
+        tokenLength: token.length,
+        socketId: this.socket?.id
+      });
       this.emit('login-success', { token, user });
     });
 
     this.socket.on('login-error', ({ error }) => {
-      console.error('Login error:', error);
+      logger.error(SocketService.COMPONENT, `Socket login error`, {
+        error,
+        socketId: this.socket?.id
+      });
       this.emit('login-error', { error });
     });
 
@@ -51,11 +69,17 @@ export class SocketService {
     });
 
     this.socket.on('message-ack', ({ messageId }) => {
-      console.log('Message acknowledged:', messageId);
+      logger.debug(SocketService.COMPONENT, `Message acknowledged`, {
+        messageId,
+        socketId: this.socket?.id
+      });
     });
 
     this.socket.on('message-error', ({ error }) => {
-      console.error('Message error:', error);
+      logger.error(SocketService.COMPONENT, `Message error`, {
+        error,
+        socketId: this.socket?.id
+      });
     });
 
     this.socket.on('message-removed', (data) => {
@@ -108,6 +132,9 @@ export class SocketService {
 
   disconnect(): void {
     if (this.socket) {
+      logger.info(SocketService.COMPONENT, `Disconnecting socket`, {
+        socketId: this.socket.id
+      });
       this.socket.disconnect();
       this.socket = null;
     }
@@ -116,22 +143,41 @@ export class SocketService {
 
   // Authentication
   login(secretKey: string): void {
-    if (this.socket) {
-      this.socket.emit('login', { secretKey });
+    if (!this.socket) {
+      logger.error(SocketService.COMPONENT, `Cannot login - socket not connected`);
+      return;
     }
+    logger.info(SocketService.COMPONENT, `Sending login request`, {
+      secretKeyLength: secretKey.length,
+      socketId: this.socket.id
+    });
+    this.socket.emit('login', { secretKey });
   }
 
   join(): void {
-    if (this.socket) {
-      this.socket.emit('join');
+    if (!this.socket) {
+      logger.error(SocketService.COMPONENT, `Cannot join - socket not connected`);
+      return;
     }
+    logger.info(SocketService.COMPONENT, `Joining chat room`, {
+      socketId: this.socket.id
+    });
+    this.socket.emit('join');
   }
 
   // Messaging
   sendMessage(messageData: MessageData): void {
-    if (this.socket) {
-      this.socket.emit('message', messageData);
+    if (!this.socket) {
+      logger.error(SocketService.COMPONENT, `Cannot send message - socket not connected`);
+      return;
     }
+    logger.info(SocketService.COMPONENT, `Sending message`, {
+      type: messageData.type,
+      contentLength: messageData.content.length,
+      seenOnce: messageData.seenOnce,
+      socketId: this.socket.id
+    });
+    this.socket.emit('message', messageData);
   }
 
   markSeenOnceViewed(messageId: string): void {

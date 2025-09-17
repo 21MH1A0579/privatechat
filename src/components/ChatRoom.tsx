@@ -24,6 +24,8 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
   const fileInputRef = useRef<HTMLInputElement>(null);
   const socketService = useRef<SocketService | null>(null);
   const webrtcService = useRef<WebRTCService | null>(null);
+  
+  const COMPONENT = 'ChatRoom';
 
   useEffect(() => {
     // Initialize services
@@ -33,19 +35,22 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
     // Socket event listeners
     socketService.current.on('connect', () => {
       setIsConnected(true);
-      console.log(`🔌 Socket connected, attempting login with secret key: "${secretKey}"`);
+      logger.info(COMPONENT, `Socket connected, attempting login`, {
+        secretKeyLength: secretKey.length
+      });
       socketService.current?.login(secretKey);
     });
 
     // Authentication events
     socketService.current.on('login-success', ({ user }) => {
-      console.log(`✅ Login successful! Username: "${user}"`);
+      logger.info(COMPONENT, `Login successful`, { user });
+      logger.setUserId(user);
       setCurrentUser(user);
       socketService.current?.join();
     });
 
     socketService.current.on('login-error', ({ error }) => {
-      console.error(`❌ Login failed: ${error}`);
+      logger.error(COMPONENT, `Login failed`, { error });
       // Handle login error - redirect back to login form
       alert('Invalid credentials');
       onLogout();

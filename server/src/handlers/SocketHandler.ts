@@ -2,8 +2,16 @@ import { Server, Socket } from 'socket.io';
 import { AuthService } from '../services/AuthService.js';
 import { MessageStore, Message } from '../services/MessageStore.js';
 
+interface LogContext {
+  socketId: string;
+  userId?: string;
+  timestamp: string;
+  [key: string]: any;
+}
+
 export class SocketHandler {
   private connectedUsers = new Map<string, string>(); // socketId -> secretKey
+  private static readonly COMPONENT = 'SocketHandler';
 
   constructor(
     private io: Server,
@@ -13,9 +21,38 @@ export class SocketHandler {
     this.setupSocketHandlers();
   }
 
+  private log(level: 'info' | 'warn' | 'error', message: string, context: LogContext): void {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level: level.toUpperCase(),
+      component: SocketHandler.COMPONENT,
+      message,
+      ...context
+    };
+
+    const logMessage = `[${logEntry.level}] ${logEntry.timestamp} [${logEntry.component}] ${message}`;
+    
+    switch (level) {
+      case 'info':
+        console.log(logMessage, context);
+        break;
+      case 'warn':
+        console.warn(logMessage, context);
+        break;
+      case 'error':
+        console.error(logMessage, context);
+        break;
+    }
+  }
+
   private setupSocketHandlers(): void {
     this.io.on('connection', (socket: Socket) => {
-      console.log(`🔌 Client connected: ${socket.id}`);
+      this.log('info', `Client connected`, {
+        socketId: socket.id,
+        timestamp: new Date().toISOString(),
+        clientIP: socket.handshake.address,
+        userAgent: socket.handshake.headers['user-agent']
+      });
 
       // Authentication required for all events
       socket.on('login', (data) => this.handleLogin(socket, data));
@@ -39,28 +76,58 @@ export class SocketHandler {
   }
 
   private handleLogin(socket: Socket, data: { secretKey: string }): void {
+    const startTime = Date.now();
     try {
       const { secretKey } = data;
-      console.log(`🔐 Login attempt with secret key: "${secretKey}"`);
+      this.log('info', `Login attempt`, {
+        socketId: socket.id,
+        timestamp: new Date().toISOString(),
+        secretKeyLength: secretKey.length
+      });
       
       if (!this.authService.validateSecretKey(secretKey)) {
-        console.log(`❌ Invalid secret key: "${secretKey}"`);
+        const duration = Date.now() - startTime;
+        this.log('warn', `Invalid secret key provided`, {
+          socketId: socket.id,
+          timestamp: new Date().toISOString(),
+          secretKeyLength: secretKey.length,
+          duration: `${duration}ms`
+        });
         socket.emit('login-error', { error: 'Invalid credentials' });
         return;
       }
 
       const username = this.authService.getUsername(secretKey);
-      console.log(`👤 Mapped username: "${username}" for secret key: "${secretKey}"`);
+      this.log('info', `Username mapped successfully`, {
+        socketId: socket.id,
+        timestamp: new Date().toISOString(),
+        userId: username,
+        secretKeyLength: secretKey.length
+      });
       
       // Check if user is already connected
       if (this.messageStore.hasConnection(username)) {
-        console.log(`⚠️ User "${username}" already connected`);
+        const duration = Date.now() - startTime;
+        this.log('warn', `User already connected`, {
+          socketId: socket.id,
+          timestamp: new Date().toISOString(),
+          userId: username,
+          duration: `${duration}ms`
+        });
         socket.emit('login-error', { error: 'Invalid credentials' });
         return;
       }
 
       // Check connection limit (max 2 users)
       if (this.messageStore.getConnectionCount() >= 2) {
+        const duration = Date.now() - startTime;
+        this.log('warn', `Room is full`, {
+          socketId: socket.id,
+          timestamp: new Date().toISOString(),
+          userId: username,
+          currentConnections: this.messageStore.getConnectionCount(),
+          duration: `${duration}ms`
+        });
         socket.emit('login-error', { error: 'Room is full' });
         return;
       }
