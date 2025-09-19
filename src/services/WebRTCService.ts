@@ -40,17 +40,18 @@ export class WebRTCService {
     });
   }
 
-  async startCall(localVideo: HTMLVideoElement, remoteVideo: HTMLVideoElement): Promise<void> {
+  async startCall(localVideo: HTMLVideoElement, remoteVideo: HTMLVideoElement, callType: 'voice' | 'video' = 'video'): Promise<void> {
     this.localVideoElement = localVideo;
     this.remoteVideoElement = remoteVideo;
 
     try {
-      console.log('🎥 Requesting camera and microphone access...');
+      const mediaConstraints = callType === 'voice' 
+        ? { video: false, audio: true }
+        : { video: true, audio: true };
+        
+      console.log(`🎥 Requesting ${callType} access...`);
       // Get user media
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
-      });
+      this.localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
 
       console.log('🎥 Camera and microphone access granted!');
       console.log(`🎥 Local stream tracks: ${this.localStream.getTracks().length}`);

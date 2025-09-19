@@ -10,8 +10,10 @@ interface LogContext {
 }
 
 export class SocketHandler {
-  private connectedUsers = new Map<string, string>(); // socketId -> secretKey
+  private connectedUsers = new Map<string, string>(); // socketId -> username
+  private onlineUsers = new Set<string>(); // Set of online usernames
   private static readonly COMPONENT = 'SocketHandler';
+  private cleanupInterval: NodeJS.Timeout;
 
   constructor(
     private io: Server,
@@ -19,6 +21,18 @@ export class SocketHandler {
     private messageStore: MessageStore
   ) {
     this.setupSocketHandlers();
+    this.startCleanupInterval();
+  }
+
+  private startCleanupInterval(): void {
+    // Check for expired disappearing photos every 5 seconds
+    this.cleanupInterval = setInterval(() => {
+      const expiredIds = this.messageStore.getExpiredDisappearingPhotos();
+      expiredIds.forEach(messageId => {
+        this.messageStore.removeDisappearingPhoto(messageId);
+        this.io.to('chat-room').emit('message-removed', { messageId });
+      });
+    }, 5000);
   }
 
   private log(level: 'info' | 'warn' | 'error', message: string, context: LogContext): void {
@@ -60,6 +74,9 @@ export class SocketHandler {
       socket.on('join', () => this.handleJoin(socket));
       socket.on('message', (data) => this.handleMessage(socket, data));
       socket.on('seen-once-viewed', (data) => this.handleSeenOnceViewed(socket, data));
+      socket.on('photo-viewed', (data) => this.handlePhotoViewed(socket, data));
+      socket.on('message-reaction', (data) => this.handleMessageReaction(socket, data));
+      socket.on('typing', (data) => this.handleTyping(socket, data));
       
       // WebRTC signaling events
       socket.on('offer', (data) => this.handleOffer(socket, data));
@@ -161,10 +178,17 @@ export class SocketHandler {
       console.log(`🔍 [SOCKET-LOGIN] Token generated (length: ${token.length})`);
       
       this.connectedUsers.set(socket.id, username);
+      this.onlineUsers.add(username);
       this.messageStore.addConnection(username);
 
       console.log(`✅ [SOCKET-LOGIN] SUCCESS: User "${username}" logged in with secret key: "${secretKey}"`);
       socket.emit('login-success', { token, user: username });
+      
+      // Broadcast online users to all clients
+      this.io.to('chat-room').emit('users-online', { 
+        users: Array.from(this.onlineUsers),
+        count: this.onlineUsers.size 
+      });
       
       const duration = Date.now() - startTime;
       this.log('info', `Login successful`, {
@@ -204,6 +228,12 @@ export class SocketHandler {
     const messages = this.messageStore.getMessages();
     socket.emit('messages-history', messages);
 
+    // Send current online users
+    socket.emit('users-online', { 
+      users: Array.from(this.onlineUsers),
+      count: this.onlineUsers.size 
+    });
+
     // Notify other users
     socket.to('chat-room').emit('user-joined', { user });
     
@@ -219,7 +249,7 @@ export class SocketHandler {
 
     try {
       // Validate message data
-      const { type, content, seenOnce = false } = data;
+      const { type, content, seenOnce = false, disappearingPhoto = false, replyTo, duration } = data;
       
       if (!type || !content) {
         socket.emit('message-error', { error: 'Invalid message data' });
@@ -246,8 +276,10 @@ export class SocketHandler {
         type,
         content: sanitizedContent,
         timestamp: new Date().toISOString(),
-        seen: false,
-        seenOnce
+        seenOnce,
+        disappearingPhoto,
+        replyTo,
+        duration
       };
 
       // Add to store
@@ -279,6 +311,21 @@ export class SocketHandler {
     }
   }
 
+
+  private handlePhotoViewed(socket: Socket, data: { messageId: string }): void {
+    const user = this.connectedUsers.get(socket.id);
+    if (!user) return;
+
+    const { messageId } = data;
+    const marked = this.messageStore.markPhotoViewed(messageId);
+    
+    if (marked) {
+      // Notify all clients that photo was viewed (starts 30-second countdown)
+      this.io.to('chat-room').emit('photo-viewed', { messageId });
+      console.log(`📸 Disappearing photo ${messageId} viewed by ${user} - will disappear in 30 seconds`);
+    }
+  }
+
   // WebRTC signaling handlers
   private handleOffer(socket: Socket, data: any): void {
     socket.to('chat-room').emit('offer', data);
@@ -295,6 +342,37 @@ export class SocketHandler {
   private handleCallStart(socket: Socket, data: any): void {
     const user = this.connectedUsers.get(socket.id);
     socket.to('chat-room').emit('call-start', { ...data, from: user });
+  }
+
+  private handleMessageReaction(socket: Socket, data: { messageId: string; emoji: string }): void {
+    const user = this.connectedUsers.get(socket.id);
+    if (!user) return;
+
+    const { messageId, emoji } = data;
+    
+    // Broadcast reaction to all clients
+    this.io.to('chat-room').emit('message-reaction', { 
+      messageId, 
+      emoji, 
+      user 
+    });
+    
+    console.log(`💖 User ${user} reacted to message ${messageId} with ${emoji}`);
+  }
+
+  private handleTyping(socket: Socket, data: { isTyping: boolean }): void {
+    const user = this.connectedUsers.get(socket.id);
+    if (!user) return;
+
+    const { isTyping } = data;
+    
+    // Broadcast typing status to other users
+    socket.to('chat-room').emit('typing', { 
+      user, 
+      isTyping 
+    });
+    
+    console.log(`⌨️ User ${user} is ${isTyping ? 'typing' : 'stopped typing'}`);
   }
 
   private handleCallEnd(socket: Socket): void {
@@ -315,6 +393,14 @@ export class SocketHandler {
     if (user) {
       this.messageStore.removeConnection(user);
       this.connectedUsers.delete(socket.id);
+      this.onlineUsers.delete(user);
+      
+      // Broadcast updated online users
+      this.io.to('chat-room').emit('users-online', { 
+        users: Array.from(this.onlineUsers),
+        count: this.onlineUsers.size 
+      });
+      
       socket.to('chat-room').emit('user-left', { user });
       console.log(`👋 User ${user} disconnected`);
 

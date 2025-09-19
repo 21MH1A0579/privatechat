@@ -5,9 +5,12 @@ import { logger } from '../utils/Logger';
 const SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface MessageData {
-  type: 'text' | 'image';
+  type: 'text' | 'image' | 'voice';
   content: string;
   seenOnce: boolean;
+  disappearingPhoto?: boolean;
+  duration?: number;
+  replyTo?: string;
 }
 
 export class SocketService {
@@ -86,6 +89,10 @@ export class SocketService {
       this.emit('message-removed', data);
     });
 
+    this.socket.on('photo-viewed', (data) => {
+      this.emit('photo-viewed', data);
+    });
+
     // User events
     this.socket.on('user-joined', (data) => {
       this.emit('user-joined', data);
@@ -93,6 +100,10 @@ export class SocketService {
 
     this.socket.on('user-left', (data) => {
       this.emit('user-left', data);
+    });
+
+    this.socket.on('users-online', (data) => {
+      this.emit('users-online', data);
     });
 
     // WebRTC signaling events
@@ -122,6 +133,14 @@ export class SocketService {
 
     this.socket.on('hold-state-change', (data) => {
       this.emit('hold-state-change', data);
+    });
+
+    this.socket.on('message-reaction', (data) => {
+      this.emit('message-reaction', data);
+    });
+
+    this.socket.on('typing', (data) => {
+      this.emit('typing', data);
     });
 
     // Error handling
@@ -195,6 +214,12 @@ export class SocketService {
     }
   }
 
+  markPhotoViewed(messageId: string): void {
+    if (this.socket) {
+      this.socket.emit('photo-viewed', { messageId });
+    }
+  }
+
   // WebRTC signaling
   sendOffer(offer: RTCSessionDescriptionInit): void {
     if (this.socket) {
@@ -214,9 +239,21 @@ export class SocketService {
     }
   }
 
-  startCall(): void {
+  startCall(type: 'voice' | 'video' = 'video'): void {
     if (this.socket) {
-      this.socket.emit('call-start', {});
+      this.socket.emit('call-start', { type });
+    }
+  }
+
+  reactToMessage(messageId: string, emoji: string): void {
+    if (this.socket) {
+      this.socket.emit('message-reaction', { messageId, emoji });
+    }
+  }
+
+  sendTyping(isTyping: boolean): void {
+    if (this.socket) {
+      this.socket.emit('typing', { isTyping });
     }
   }
 

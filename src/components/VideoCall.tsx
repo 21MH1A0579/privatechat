@@ -6,12 +6,14 @@ interface VideoCallProps {
   webrtcService: WebRTCService;
   onEndCall: () => void;
   otherUser: string;
+  callType?: 'voice' | 'video';
 }
 
 const VideoCall: React.FC<VideoCallProps> = ({ 
   webrtcService, 
   onEndCall, 
-  otherUser 
+  otherUser,
+  callType = 'video'
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -27,7 +29,7 @@ const VideoCall: React.FC<VideoCallProps> = ({
   useEffect(() => {
     const initializeCall = async () => {
       try {
-        await webrtcService.startCall(localVideoRef.current!, remoteVideoRef.current!);
+        await webrtcService.startCall(localVideoRef.current!, remoteVideoRef.current!, callType);
         
         // Listen for connection state changes
         webrtcService.onConnectionStateChange((state) => {
@@ -142,17 +144,30 @@ const VideoCall: React.FC<VideoCallProps> = ({
     <div className="fixed inset-0 bg-black">
       {/* Video Container - Full Screen */}
       <div className="absolute inset-0 overflow-hidden">
-        {/* Remote Video (Main) - Fill full height */}
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          className="absolute inset-0 w-full h-full"
-          style={{ 
-            objectFit: 'cover',
-            objectPosition: 'center'
-          }}
-        />
+        {/* Remote Video (Main) - Fill full height - Only for video calls */}
+        {callType === 'video' ? (
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="absolute inset-0 w-full h-full"
+            style={{ 
+              objectFit: 'cover',
+              objectPosition: 'center'
+            }}
+          />
+        ) : (
+          /* Voice call background */
+          <div className="absolute inset-0 bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center">
+            <div className="text-center text-white">
+              <div className="w-32 h-32 bg-white bg-opacity-20 rounded-full flex items-center justify-center mb-6">
+                <span className="text-4xl font-bold">{otherUser.charAt(0)}</span>
+              </div>
+              <h2 className="text-2xl font-semibold mb-2">{otherUser}</h2>
+              <p className="text-green-100">Voice call</p>
+            </div>
+          </div>
+        )}
         
         {/* Header - Overlay */}
         <div className={`absolute top-0 left-0 right-0 bg-black bg-opacity-50 text-white p-4 flex items-center justify-between transition-opacity duration-300 z-10 ${
@@ -166,16 +181,18 @@ const VideoCall: React.FC<VideoCallProps> = ({
           </div>
         </div>
         
-        {/* Local Video (Picture-in-Picture) */}
-        <div className="absolute top-4 right-4 w-32 h-24 sm:w-40 sm:h-30 bg-gray-800 rounded-lg overflow-hidden border-2 border-white shadow-lg z-20">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-        </div>
+        {/* Local Video (Picture-in-Picture) - Only show for video calls */}
+        {callType === 'video' && (
+          <div className="absolute top-4 right-4 w-32 h-24 sm:w-40 sm:h-30 bg-gray-800 rounded-lg overflow-hidden border-2 border-white shadow-lg z-20">
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
 
         {/* Connection Status Overlay */}
         {connectionState !== 'connected' && (
@@ -242,21 +259,24 @@ const VideoCall: React.FC<VideoCallProps> = ({
             <Phone className="w-5 h-5 sm:w-6 sm:h-6 transform rotate-[135deg]" />
           </button>
 
-          <button
-            onClick={toggleVideo}
-            className={`p-3 sm:p-4 rounded-full transition-all duration-200 ${
-              isVideoEnabled
-                ? 'bg-gray-700 hover:bg-gray-600 text-white hover:scale-105'
-                : 'bg-red-600 hover:bg-red-700 text-white hover:scale-105'
-            }`}
-            title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
-          >
-            {isVideoEnabled ? (
-              <Video className="w-5 h-5 sm:w-6 sm:h-6" />
-            ) : (
-              <VideoOff className="w-5 h-5 sm:w-6 sm:h-6" />
-            )}
-          </button>
+          {/* Only show video toggle for video calls */}
+          {callType === 'video' && (
+            <button
+              onClick={toggleVideo}
+              className={`p-3 sm:p-4 rounded-full transition-all duration-200 ${
+                isVideoEnabled
+                  ? 'bg-gray-700 hover:bg-gray-600 text-white hover:scale-105'
+                  : 'bg-red-600 hover:bg-red-700 text-white hover:scale-105'
+              }`}
+              title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
+            >
+              {isVideoEnabled ? (
+                <Video className="w-5 h-5 sm:w-6 sm:h-6" />
+              ) : (
+                <VideoOff className="w-5 h-5 sm:w-6 sm:h-6" />
+              )}
+            </button>
+          )}
 
           <button
             onClick={toggleHold}
