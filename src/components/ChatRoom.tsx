@@ -62,10 +62,13 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
 
     // Authentication events
     socketService.current.on('login-success', ({ user }: { user: string }) => {
+      console.log(`✅ [CHATROOM] Login success received for user: "${user}"`);
       logger.info(COMPONENT, `Login successful`, { user });
       logger.setUserId(user);
       setCurrentUser(user);
+      console.log(`🏠 [CHATROOM] About to call join() for user: "${user}"`);
       socketService.current?.join();
+      console.log(`🏠 [CHATROOM] Join() called for user: "${user}"`);
     });
 
     socketService.current.on('login-error', ({ error }: { error: string }) => {

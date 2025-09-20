@@ -13,13 +13,15 @@ export class SocketHandler {
   private connectedUsers = new Map<string, string>(); // socketId -> username
   private onlineUsers = new Set<string>(); // Set of online usernames
   private static readonly COMPONENT = 'SocketHandler';
-  private cleanupInterval: NodeJS.Timeout;
+  private static readonly VERSION = 'v2.0-join-fix'; // Version identifier
+  private cleanupInterval!: NodeJS.Timeout;
 
   constructor(
     private io: Server,
     private authService: AuthService,
     private messageStore: MessageStore
   ) {
+    console.log(`🚀 [SOCKET-HANDLER] Initializing SocketHandler ${SocketHandler.VERSION}`);
     this.setupSocketHandlers();
     this.startCleanupInterval();
   }
@@ -213,19 +215,25 @@ export class SocketHandler {
 
   private handleJoin(socket: Socket): void {
     const user = this.connectedUsers.get(socket.id);
+    console.log(`🏠 [JOIN-START] User attempting to join: "${user}", socketId: ${socket.id}`);
+    
     if (!user) {
+      console.log(`❌ [JOIN-ERROR] No user found for socket: ${socket.id}`);
       socket.emit('error', { message: 'Not authenticated' });
       return;
     }
 
+    console.log(`🏠 [JOIN-PROCESS] User "${user}" joining chat-room...`);
     socket.join('chat-room');
     
     // Send existing messages
     const messages = this.messageStore.getMessages();
     socket.emit('messages-history', messages);
+    console.log(`📜 [JOIN] Sent ${messages.length} messages to ${user}`);
 
     // Broadcast updated online users to ALL clients in the room (including this one)
     console.log(`👥 [JOIN] Broadcasting users-online to all clients:`, Array.from(this.onlineUsers));
+    console.log(`👥 [JOIN] Total online users: ${this.onlineUsers.size}`);
     this.io.to('chat-room').emit('users-online', { 
       users: Array.from(this.onlineUsers),
       count: this.onlineUsers.size 
@@ -234,7 +242,7 @@ export class SocketHandler {
     // Notify other users that someone joined
     socket.to('chat-room').emit('user-joined', { user });
     
-    console.log(`👥 User ${user} joined chat room with ${this.onlineUsers.size} total online`);
+    console.log(`✅ [JOIN-SUCCESS] User ${user} joined chat room with ${this.onlineUsers.size} total online`);
   }
 
   private handleMessage(socket: Socket, data: any): void {
