@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Image, Video, LogOut, Users, Clock, Phone, Mic, Paperclip, Smile, MicIcon } from 'lucide-react';
+import { Send, Image, Video, LogOut, Users, Clock, Phone, Paperclip, Smile, MicIcon } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import MessageBubble from './MessageBubble';
 import VideoCall from './VideoCall';
@@ -61,7 +61,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
     });
 
     // Authentication events
-    socketService.current.on('login-success', ({ user }) => {
+    socketService.current.on('login-success', ({ user }: { user: string }) => {
       logger.info(COMPONENT, `Login successful`, { user });
       logger.setUserId(user);
       setCurrentUser(user);
@@ -99,15 +99,50 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
     });
 
     socketService.current.on('users-online', ({ users }: { users: string[] }) => {
+      console.log(`👥 [USERS-ONLINE] Received users:`, users);
+      console.log(`👥 [USERS-ONLINE] Current user state: "${currentUser}"`);
+      
       setOnlineUsers(users);
-      const otherOnlineUser = users.find(user => user !== currentUser);
-      if (otherOnlineUser) {
-        setOtherUser(otherOnlineUser);
+      
+      // Handle race condition: if currentUser is not set yet, we need to determine other user differently
+      if (users.length >= 2) {
+        if (currentUser) {
+          // Normal case: currentUser is set, find the other user
+          const otherOnlineUser = users.find(user => user !== currentUser);
+          console.log(`👥 [USERS-ONLINE] Found other user (normal): "${otherOnlineUser}"`);
+          if (otherOnlineUser) {
+            setOtherUser(otherOnlineUser);
+          }
+        } else {
+          // Race condition case: currentUser not set yet, determine other user by secret key mapping
+          const userMapping: Record<string, string> = {
+            'Chaithu143': 'Chaitanya',
+            'Geethu143': 'Geetha'
+          };
+          
+          const expectedCurrentUser = userMapping[secretKey];
+          const otherOnlineUser = users.find(user => user !== expectedCurrentUser);
+          console.log(`👥 [USERS-ONLINE] Race condition - expected current: "${expectedCurrentUser}", found other: "${otherOnlineUser}"`);
+          
+          if (otherOnlineUser) {
+            setOtherUser(otherOnlineUser);
+          }
+        }
       }
     });
 
     socketService.current.on('user-joined', ({ user }: { user: string }) => {
-      if (user !== currentUser) {
+      console.log(`👤 [USER-JOINED] User joined: "${user}", currentUser: "${currentUser}"`);
+      
+      // Handle race condition here too
+      const userMapping: Record<string, string> = {
+        'Chaithu143': 'Chaitanya',
+        'Geethu143': 'Geetha'
+      };
+      const expectedCurrentUser = userMapping[secretKey];
+      
+      if (user !== currentUser && user !== expectedCurrentUser) {
+        console.log(`👤 [USER-JOINED] Setting other user: "${user}"`);
         setOtherUser(user);
         setOtherUserEverJoined(true);
       }
@@ -157,6 +192,18 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Handle late currentUser update (after users-online event)
+  useEffect(() => {
+    if (currentUser && onlineUsers.length >= 2 && !otherUser) {
+      console.log(`👥 [LATE-UPDATE] currentUser now set: "${currentUser}", finding other user from:`, onlineUsers);
+      const otherOnlineUser = onlineUsers.find(user => user !== currentUser);
+      if (otherOnlineUser) {
+        console.log(`👥 [LATE-UPDATE] Found other user: "${otherOnlineUser}"`);
+        setOtherUser(otherOnlineUser);
+      }
+    }
+  }, [currentUser, onlineUsers, otherUser]);
 
   // Close emoji picker when clicking outside
   useEffect(() => {
@@ -463,8 +510,21 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
 
   const getOtherUserName = () => {
     console.log(`🔍 getOtherUserName called - currentUser: "${currentUser}", otherUser: "${otherUser}"`);
-    const result = otherUser || (currentUser === 'Chaitanya' ? 'Geetha' : 'Chaitanya');
-    console.log(`🔍 getOtherUserName returning: "${result}"`);
+    
+    if (otherUser) {
+      console.log(`🔍 getOtherUserName returning otherUser: "${otherUser}"`);
+      return otherUser;
+    }
+    
+    // Fallback logic based on secret key
+    const userMapping: Record<string, string> = {
+      'Chaithu143': 'Chaitanya',
+      'Geethu143': 'Geetha'
+    };
+    const currentUserFromKey = userMapping[secretKey];
+    const result = currentUserFromKey === 'Chaitanya' ? 'Geetha' : 'Chaitanya';
+    
+    console.log(`🔍 getOtherUserName fallback - secretKey: "${secretKey}", currentFromKey: "${currentUserFromKey}", returning: "${result}"`);
     return result;
   };
 
@@ -505,10 +565,10 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
                 <>
                   <div className={`w-2 h-2 rounded-full mr-2 ${
                     isConnected && onlineUsers.length === 2 ? 'bg-green-300' : 
-                    isConnected && onlineUsers.length === 1 && otherUserEverJoined ? 'bg-red-400' : 'bg-gray-400'
+                    isConnected && onlineUsers.length === 1 && (otherUserEverJoined || otherUser) ? 'bg-red-400' : 'bg-gray-400'
                   }`} />
                   {isConnected && onlineUsers.length === 2 ? 'online' : 
-                   isConnected && onlineUsers.length === 1 && otherUserEverJoined ? 'offline' :
+                   isConnected && onlineUsers.length === 1 && (otherUserEverJoined || otherUser) ? 'offline' :
                    isConnected ? 'waiting...' : 'connecting...'}
                 </>
               )}
@@ -739,7 +799,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
             <EmojiPicker 
               onEmojiClick={handleEmojiClick}
               autoFocusSearch={false}
-              theme="light"
+              theme={"light" as any}
               width={300}
               height={400}
             />
