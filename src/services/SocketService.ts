@@ -89,6 +89,11 @@ export class SocketService {
       this.emit('message-removed', data);
     });
 
+    this.socket.on('message-disappearing', (data) => {
+      console.log(`👁️ [SOCKET-SERVICE] Received message-disappearing event:`, data);
+      this.emit('message-disappearing', data);
+    });
+
     this.socket.on('photo-viewed', (data) => {
       this.emit('photo-viewed', data);
     });
@@ -256,8 +261,13 @@ export class SocketService {
   }
 
   startCall(type: 'voice' | 'video' = 'video'): void {
+    console.log(`📞 [SOCKET-SERVICE] Starting ${type} call via socket...`);
+    
     if (this.socket) {
       this.socket.emit('call-start', { type });
+      console.log(`📞 [SOCKET-SERVICE] Call-start event emitted with type: ${type}`);
+    } else {
+      console.error(`❌ [SOCKET-SERVICE] Cannot start call - socket not connected`);
     }
   }
 

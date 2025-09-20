@@ -95,7 +95,16 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
       setMessages(prev => prev.filter(m => m.id !== messageId));
     });
 
+    socketService.current.on('message-disappearing', ({ messageId, type }: { messageId: string; type: string }) => {
+      console.log(`👁️ [CHATROOM] Received message-disappearing event for ${messageId}, type: ${type}`);
+      // This will trigger the disappearing animation for all clients
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId ? { ...msg, isDisappearing: true } : msg
+      ));
+    });
+
     socketService.current.on('photo-viewed', ({ messageId }: { messageId: string }) => {
+      console.log(`👁️ [CHATROOM] Received photo-viewed notification for message: ${messageId}`);
       setMessages(prev => prev.map(msg => 
         msg.id === messageId ? { ...msg, viewedAt: new Date().toISOString() } : msg
       ));
@@ -277,6 +286,93 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
     }
   };
 
+  const compressImage = (file: File, callback: (dataUrl: string) => void) => {
+    console.log(`🗜️ [IMAGE-COMPRESS] Starting compression for ${file.name}`);
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const img = new window.Image();
+    
+    img.onload = () => {
+      console.log(`🗜️ [IMAGE-COMPRESS] Original dimensions: ${img.width}x${img.height}`);
+      
+      // Calculate new dimensions to keep image under 1MB
+      // Start with 80% quality and reasonable max dimensions
+      let maxWidth = 1200;
+      let maxHeight = 1200;
+      let quality = 0.8;
+      
+      // If image is very large, reduce dimensions more aggressively
+      if (img.width > 2000 || img.height > 2000) {
+        maxWidth = 800;
+        maxHeight = 800;
+        quality = 0.7;
+      }
+      
+      let { width, height } = calculateDimensions(img.width, img.height, maxWidth, maxHeight);
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Draw and compress
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Try different quality levels until we get under 1MB
+      const tryCompress = (currentQuality: number) => {
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', currentQuality);
+        const sizeInMB = (compressedDataUrl.length * 3 / 4) / (1024 * 1024);
+        
+        console.log(`🗜️ [IMAGE-COMPRESS] Quality ${currentQuality}, size: ${sizeInMB.toFixed(2)}MB`);
+        
+        if (sizeInMB <= 1.0 || currentQuality <= 0.3) {
+          console.log(`🗜️ [IMAGE-COMPRESS] Compression complete: ${width}x${height} at ${currentQuality} quality`);
+          callback(compressedDataUrl);
+        } else {
+          // Reduce quality and try again
+          tryCompress(currentQuality - 0.1);
+        }
+      };
+      
+      tryCompress(quality);
+    };
+    
+    img.onerror = (error: any) => {
+      console.error(`❌ [IMAGE-COMPRESS] Error loading image:`, error);
+      // Fallback: try to send original
+      const reader = new FileReader();
+      reader.onload = (e) => callback(e.target?.result as string);
+      reader.readAsDataURL(file);
+    };
+    
+    // Load the image
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const calculateDimensions = (originalWidth: number, originalHeight: number, maxWidth: number, maxHeight: number) => {
+    let width = originalWidth;
+    let height = originalHeight;
+    
+    // Calculate aspect ratio
+    const aspectRatio = originalWidth / originalHeight;
+    
+    // Resize to fit within max dimensions while maintaining aspect ratio
+    if (width > maxWidth) {
+      width = maxWidth;
+      height = width / aspectRatio;
+    }
+    
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * aspectRatio;
+    }
+    
+    return { width: Math.round(width), height: Math.round(height) };
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, disappearing: boolean = false) => {
     console.log(`📸 [IMAGE-UPLOAD] Starting image upload, disappearing: ${disappearing}`);
     const file = e.target.files?.[0];
@@ -307,30 +403,51 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
       return;
     }
 
-    console.log(`📸 [IMAGE-UPLOAD] File validation passed, reading as data URL...`);
-    const reader = new FileReader();
+    console.log(`📸 [IMAGE-UPLOAD] File validation passed, processing image...`);
     
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      console.log(`📸 [IMAGE-UPLOAD] File read complete, data URL length: ${dataUrl?.length}`);
-      
-      const messageData = {
-        type: 'image' as const,
-        content: dataUrl,
-        seenOnce: false,
-        disappearingPhoto: disappearing
-      };
+    // Check if image needs compression (larger than 1MB)
+    if (file.size > 1024 * 1024) {
+      console.log(`📸 [IMAGE-UPLOAD] Image is ${(file.size / (1024 * 1024)).toFixed(2)}MB, compressing...`);
+      compressImage(file, (compressedDataUrl: string) => {
+        console.log(`📸 [IMAGE-UPLOAD] Image compressed, new size: ${(compressedDataUrl.length * 3 / 4 / (1024 * 1024)).toFixed(2)}MB`);
+        
+        const messageData = {
+          type: 'image' as const,
+          content: compressedDataUrl,
+          seenOnce: false,
+          disappearingPhoto: disappearing
+        };
 
-      console.log(`📸 [IMAGE-UPLOAD] Sending image message via socket...`);
-      socketService.current?.sendMessage(messageData);
-      console.log(`📸 [IMAGE-UPLOAD] Image message sent!`);
-    };
-    
-    reader.onerror = (error) => {
-      console.error(`❌ [IMAGE-UPLOAD] FileReader error:`, error);
-    };
-    
-    reader.readAsDataURL(file);
+        console.log(`📸 [IMAGE-UPLOAD] Sending compressed image message via socket...`);
+        socketService.current?.sendMessage(messageData);
+        console.log(`📸 [IMAGE-UPLOAD] Compressed image message sent!`);
+      });
+    } else {
+      console.log(`📸 [IMAGE-UPLOAD] Image is small enough (${(file.size / 1024).toFixed(0)}KB), sending as-is...`);
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        console.log(`📸 [IMAGE-UPLOAD] File read complete, data URL length: ${dataUrl?.length}`);
+        
+        const messageData = {
+          type: 'image' as const,
+          content: dataUrl,
+          seenOnce: false,
+          disappearingPhoto: disappearing
+        };
+
+        console.log(`📸 [IMAGE-UPLOAD] Sending image message via socket...`);
+        socketService.current?.sendMessage(messageData);
+        console.log(`📸 [IMAGE-UPLOAD] Image message sent!`);
+      };
+      
+      reader.onerror = (error) => {
+        console.error(`❌ [IMAGE-UPLOAD] FileReader error:`, error);
+      };
+      
+      reader.readAsDataURL(file);
+    }
 
     // Reset file inputs
     if (fileInputRef.current) {
@@ -342,25 +459,62 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
   };
 
   const handleStartCall = (type: 'voice' | 'video' = 'video') => {
-    if (socketService.current && webrtcService.current) {
-      setCallType(type);
-      socketService.current.startCall(type);
-      setInCall(true);
+    console.log(`📞 [CALL-START] Initiating ${type} call...`);
+    
+    if (!socketService.current) {
+      console.error(`❌ [CALL-START] Socket service not available`);
+      alert('Connection not available. Please refresh and try again.');
+      return;
     }
+    
+    if (!webrtcService.current) {
+      console.error(`❌ [CALL-START] WebRTC service not available`);
+      alert('WebRTC not available. Please refresh and try again.');
+      return;
+    }
+    
+    if (onlineUsers.length < 2) {
+      console.warn(`⚠️ [CALL-START] Not enough users online: ${onlineUsers.length}`);
+      alert('The other user must be online to start a call.');
+      return;
+    }
+    
+    console.log(`📞 [CALL-START] Starting ${type} call with other user: ${getOtherUserName()}`);
+    setCallType(type);
+    socketService.current.startCall(type);
+    setInCall(true);
+    console.log(`📞 [CALL-START] Call state updated, entering call UI`);
   };
 
   const handleAcceptCall = () => {
-    if (webrtcService.current && incomingCall) {
-      setCallType(incomingCall.type);
-      setInCall(true);
-      setIncomingCall(null);
+    console.log(`📞 [CALL-ACCEPT] Accepting incoming ${incomingCall?.type} call from ${incomingCall?.from}`);
+    
+    if (!webrtcService.current) {
+      console.error(`❌ [CALL-ACCEPT] WebRTC service not available`);
+      alert('Cannot accept call. Please refresh and try again.');
+      return;
     }
+    
+    if (!incomingCall) {
+      console.error(`❌ [CALL-ACCEPT] No incoming call to accept`);
+      return;
+    }
+    
+    console.log(`📞 [CALL-ACCEPT] Setting call type to ${incomingCall.type} and entering call`);
+    setCallType(incomingCall.type);
+    setInCall(true);
+    setIncomingCall(null);
   };
 
   const handleRejectCall = () => {
+    console.log(`📞 [CALL-REJECT] Rejecting incoming ${incomingCall?.type} call from ${incomingCall?.from}`);
+    
     if (socketService.current) {
       socketService.current.endCall();
       setIncomingCall(null);
+      console.log(`📞 [CALL-REJECT] Call rejected and incoming call cleared`);
+    } else {
+      console.error(`❌ [CALL-REJECT] Socket service not available`);
     }
   };
 

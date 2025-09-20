@@ -29,7 +29,12 @@ const VideoCall: React.FC<VideoCallProps> = ({
   useEffect(() => {
     const initializeCall = async () => {
       try {
-        await webrtcService.startCall(localVideoRef.current!, remoteVideoRef.current!, callType);
+        // For voice calls, pass null for video elements
+        const localVideoElement = callType === 'video' ? localVideoRef.current : null;
+        const remoteVideoElement = callType === 'video' ? remoteVideoRef.current : null;
+        
+        console.log(`🎤 [VIDEO-CALL] Initializing ${callType} call...`);
+        await webrtcService.startCall(localVideoElement, remoteVideoElement, callType);
         
         // Listen for connection state changes
         webrtcService.onConnectionStateChange((state) => {
@@ -159,12 +164,25 @@ const VideoCall: React.FC<VideoCallProps> = ({
         ) : (
           /* Voice call background */
           <div className="absolute inset-0 bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center">
+            {/* Hidden audio element for voice call audio */}
+            <audio
+              ref={remoteVideoRef as any}
+              autoPlay
+              playsInline
+              className="hidden"
+            />
             <div className="text-center text-white">
               <div className="w-32 h-32 bg-white bg-opacity-20 rounded-full flex items-center justify-center mb-6">
                 <span className="text-4xl font-bold">{otherUser.charAt(0)}</span>
               </div>
               <h2 className="text-2xl font-semibold mb-2">{otherUser}</h2>
               <p className="text-green-100">Voice call</p>
+              <div className="mt-4">
+                <div className={`w-4 h-4 rounded-full mx-auto ${
+                  connectionState === 'connected' ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'
+                }`} />
+                <p className="text-sm mt-2 opacity-75">{connectionState}</p>
+              </div>
             </div>
           </div>
         )}

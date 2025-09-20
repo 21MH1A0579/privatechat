@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Eye, EyeOff, Reply, MoreHorizontal, Heart, Play, Pause } from 'lucide-react';
+import { Eye, EyeOff, Reply, Play, Pause } from 'lucide-react';
 import { Message } from '../types/Message';
 
 interface MessageBubbleProps {
@@ -23,8 +23,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 }) => {
   const [seenOnceRevealed, setSeenOnceRevealed] = useState(false);
   const [photoRevealed, setPhotoRevealed] = useState(false);
-  const [photoCountdown, setPhotoCountdown] = useState(30);
-  const [isDisappearing, setIsDisappearing] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -34,79 +32,33 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [dragOffset, setDragOffset] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Effect to make seen-once messages disappear for sender too
+  // Effect to make seen-once messages disappear for sender too (local timer for sender)
   useEffect(() => {
-    if (message.seenOnce && isOwn) {
+    if (message.seenOnce && isOwn && !message.isDisappearing) {
       const timer = setTimeout(() => {
-        setIsDisappearing(true);
-        // Remove message after animation
-        setTimeout(() => {
-          onSeenOnceViewed(message.id);
-        }, 500);
-      }, 3000);
+        console.log(`👁️ [MESSAGE-BUBBLE] Sender's 5-second timer expired, calling onSeenOnceViewed for ${message.id}`);
+        onSeenOnceViewed(message.id);
+      }, 5000);
 
       return () => clearTimeout(timer);
     }
-  }, [message.seenOnce, isOwn, message.id, onSeenOnceViewed]);
+  }, [message.seenOnce, isOwn, message.id, message.isDisappearing, onSeenOnceViewed]);
 
   const handleRevealSeenOnce = () => {
     if (message.seenOnce && !isOwn && !seenOnceRevealed) {
+      console.log(`👁️ [MESSAGE-BUBBLE] Receiver clicked to reveal seen-once message: ${message.id}`);
       setSeenOnceRevealed(true);
-      // Start disappearing animation after 2.5 seconds
-      setTimeout(() => {
-        setIsDisappearing(true);
-      }, 2500);
-      // Remove message after animation completes
-      setTimeout(() => {
-        onSeenOnceViewed(message.id);
-      }, 3000);
+      // Server will coordinate the disappearing animation for all clients
+      onSeenOnceViewed(message.id);
     }
   };
 
   const handleRevealPhoto = () => {
-    if (message.disappearingPhoto && !isOwn && !photoRevealed) {
+    if (message.disappearingPhoto && !isOwn && !photoRevealed && !message.viewedAt) {
+      console.log(`👁️ [DISAPPEARING-PHOTO] User clicked to view photo: ${message.id}`);
       setPhotoRevealed(true);
+      // Server will coordinate the 5-second timer and disappearing animation for all clients
       onPhotoViewed?.(message.id);
-      
-      // Add event listener to detect when user navigates away or goes back
-      const handleVisibilityChange = () => {
-        if (document.hidden) {
-          // User switched tabs or minimized - remove the photo
-          setTimeout(() => {
-            onPhotoViewed?.(message.id);
-          }, 100);
-        }
-      };
-
-      const handleBeforeUnload = () => {
-        // User is leaving the page - remove the photo
-        onPhotoViewed?.(message.id);
-      };
-
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('beforeunload', handleBeforeUnload);
-      
-      // Also remove photo if user clicks anywhere else after viewing
-      const handleClickOutside = (e: MouseEvent) => {
-        const target = e.target as HTMLElement;
-        if (!target.closest('.disappearing-photo-container')) {
-          setIsDisappearing(true);
-          setTimeout(() => {
-            onPhotoViewed?.(message.id);
-          }, 500);
-        }
-      };
-
-      setTimeout(() => {
-        document.addEventListener('click', handleClickOutside);
-      }, 100);
-
-      // Cleanup function
-      return () => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-        document.removeEventListener('click', handleClickOutside);
-      };
     }
   };
 
@@ -209,7 +161,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (isOwn) {
       // Sender sees their own message initially, but it will disappear after 3 seconds for them too
       return (
-        <div className={`space-y-2 ${isDisappearing ? 'disappear-animation' : ''}`}>
+        <div className={`space-y-2 ${message.isDisappearing ? 'disappear-animation' : ''}`}>
           {renderMessageContent()}
           <div className="text-xs opacity-75 flex items-center">
             <Eye className="w-3 h-3 mr-1" />
@@ -232,11 +184,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
 
     return (
-      <div className={`space-y-2 ${isDisappearing ? 'disappear-animation' : ''}`}>
+      <div className={`space-y-2 ${message.isDisappearing ? 'disappear-animation' : ''}`}>
         {renderMessageContent()}
         <div className="text-xs opacity-75 flex items-center">
           <Eye className="w-3 h-3 mr-1" />
-          {isDisappearing ? 'Disappearing...' : 'Disappearing in 3s...'}
+          {message.isDisappearing ? 'Disappearing...' : 'Disappearing in 5s...'}
         </div>
       </div>
     );
@@ -244,25 +196,32 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const renderMessageContent = () => {
     if (message.type === 'image') {
-      // Handle disappearing photos (WhatsApp view-once style)
+      // Handle disappearing photos (Snapchat-style)
       if (message.disappearingPhoto) {
         if (isOwn) {
-          // Sender sees "View once" indicator but cannot see the actual photo
+          // Sender sees different icons based on whether photo was viewed
+          const hasBeenViewed = message.viewedAt;
           return (
             <div className="relative max-w-xs">
               <div className="bg-gray-200 rounded-lg p-8 flex flex-col items-center justify-center min-h-[120px]">
-                <Eye className="w-8 h-8 text-gray-500 mb-2" />
+                {hasBeenViewed ? (
+                  <Eye className="w-8 h-8 text-blue-500 mb-2" />
+                ) : (
+                  <EyeOff className="w-8 h-8 text-gray-500 mb-2" />
+                )}
                 <p className="text-sm text-gray-600 text-center">Photo</p>
-                <p className="text-xs text-gray-500 text-center mt-1">View once</p>
+                <p className="text-xs text-gray-500 text-center mt-1">
+                  {hasBeenViewed ? 'Opened' : 'Delivered'}
+                </p>
               </div>
-              <div className="absolute top-2 right-2 bg-purple-500 text-white text-xs px-2 py-1 rounded-full">
-                👁️
+              <div className="absolute top-2 right-2 bg-purple-500 text-white text-xs px-2 py-1 rounded-full flex items-center">
+                {hasBeenViewed ? '👁️' : '👁️‍🗨️'}
               </div>
             </div>
           );
         } else {
           // Recipient sees blurred photo until clicked
-          if (!photoRevealed) {
+          if (!photoRevealed && !message.viewedAt) {
             return (
               <div 
                 className="relative cursor-pointer max-w-xs disappearing-photo-container"
@@ -283,18 +242,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 </div>
               </div>
             );
-          } else {
-            // Photo is revealed - will disappear when user navigates away
+          } else if (photoRevealed || message.viewedAt) {
+            // Photo is revealed - will disappear after 5 seconds
             return (
-              <div className={`relative disappearing-photo-container ${isDisappearing ? 'disappear-animation' : ''}`}>
+              <div className={`relative disappearing-photo-container ${message.isDisappearing ? 'disappear-animation' : ''}`}>
                 <img
                   src={message.content}
                   alt="Disappearing photo"
                   className="max-w-xs rounded-lg"
                   loading="lazy"
                 />
-                <div className="absolute top-2 right-2 bg-purple-500 text-white text-xs px-2 py-1 rounded-full">
-                  Opened
+                <div className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                  {message.isDisappearing ? 'Disappearing...' : 'Opened • 5s timer'}
                 </div>
               </div>
             );

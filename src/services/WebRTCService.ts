@@ -40,7 +40,7 @@ export class WebRTCService {
     });
   }
 
-  async startCall(localVideo: HTMLVideoElement, remoteVideo: HTMLVideoElement, callType: 'voice' | 'video' = 'video'): Promise<void> {
+  async startCall(localVideo: HTMLVideoElement | null, remoteVideo: HTMLVideoElement | null, callType: 'voice' | 'video' = 'video'): Promise<void> {
     this.localVideoElement = localVideo;
     this.remoteVideoElement = remoteVideo;
 
@@ -49,20 +49,22 @@ export class WebRTCService {
         ? { video: false, audio: true }
         : { video: true, audio: true };
         
-      console.log(`🎥 Requesting ${callType} access...`);
+      console.log(`🎥 Requesting ${callType} access with constraints:`, mediaConstraints);
       // Get user media
       this.localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
 
-      console.log('🎥 Camera and microphone access granted!');
+      console.log(`🎥 ${callType} access granted!`);
       console.log(`🎥 Local stream tracks: ${this.localStream.getTracks().length}`);
       this.localStream.getTracks().forEach((track, index) => {
         console.log(`🎥 Track ${index}: ${track.kind} - ${track.label} - enabled: ${track.enabled}`);
       });
 
-      // Display local video
-      if (this.localVideoElement) {
+      // Display local video only for video calls
+      if (callType === 'video' && this.localVideoElement) {
         this.localVideoElement.srcObject = this.localStream;
         console.log('🎥 Local video element connected to stream');
+      } else if (callType === 'voice') {
+        console.log('🎤 Voice call - no video element needed for local stream');
       }
 
       // Create peer connection
@@ -96,8 +98,16 @@ export class WebRTCService {
     // Handle remote stream
     this.peerConnection.ontrack = (event) => {
       this.remoteStream = event.streams[0];
+      console.log(`🎥 Remote stream received with ${event.streams[0].getTracks().length} tracks`);
+      event.streams[0].getTracks().forEach((track, index) => {
+        console.log(`🎥 Remote track ${index}: ${track.kind} - enabled: ${track.enabled}`);
+      });
+      
       if (this.remoteVideoElement) {
         this.remoteVideoElement.srcObject = this.remoteStream;
+        console.log('🎥 Remote video element connected to stream');
+      } else {
+        console.log('🎤 Voice call - no remote video element, audio will play through default output');
       }
     };
 
@@ -122,12 +132,14 @@ export class WebRTCService {
     try {
       console.log('🎥 Handling incoming WebRTC offer...');
       if (!this.peerConnection) {
-        console.log('🎥 No existing peer connection, requesting camera access for incoming call...');
+        console.log('🎥 No existing peer connection, requesting media access for incoming call...');
+        // For incoming calls, we need to determine if it's voice or video
+        // For now, assume video call - this could be improved with call type signaling
+        const mediaConstraints = { video: true, audio: true };
+        console.log('🎥 Using media constraints for incoming call:', mediaConstraints);
+        
         // Get user media first
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
-        });
+        this.localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
 
         console.log('🎥 Camera access granted for incoming call!');
         console.log(`🎥 Local stream tracks: ${this.localStream.getTracks().length}`);

@@ -15,4 +15,5 @@ export interface Message {
   reactions?: MessageReaction[]; // Message reactions
   replyTo?: string; // ID of message being replied to
   duration?: number; // Voice message duration in seconds
+  isDisappearing?: boolean; // Client-side flag for animation state
 }
