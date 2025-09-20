@@ -200,16 +200,28 @@ export class SocketService {
   // Messaging
   sendMessage(messageData: MessageData): void {
     if (!this.socket) {
+      console.log(`❌ [SOCKET-SERVICE] Cannot send message - socket not connected`);
       logger.error(SocketService.COMPONENT, `Cannot send message - socket not connected`);
       return;
     }
+    
+    console.log(`📤 [SOCKET-SERVICE] Sending message:`, {
+      type: messageData.type,
+      contentLength: messageData.content.length,
+      seenOnce: messageData.seenOnce,
+      disappearingPhoto: messageData.disappearingPhoto,
+      socketId: this.socket.id
+    });
+    
     logger.info(SocketService.COMPONENT, `Sending message`, {
       type: messageData.type,
       contentLength: messageData.content.length,
       seenOnce: messageData.seenOnce,
       socketId: this.socket.id
     });
+    
     this.socket.emit('message', messageData);
+    console.log(`📤 [SOCKET-SERVICE] Message emitted to server`);
   }
 
   markSeenOnceViewed(messageId: string): void {

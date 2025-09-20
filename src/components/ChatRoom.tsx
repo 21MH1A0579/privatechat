@@ -278,24 +278,41 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, disappearing: boolean = false) => {
+    console.log(`📸 [IMAGE-UPLOAD] Starting image upload, disappearing: ${disappearing}`);
     const file = e.target.files?.[0];
-    if (!file || !socketService.current) return;
+    
+    if (!file) {
+      console.log(`❌ [IMAGE-UPLOAD] No file selected`);
+      return;
+    }
+    
+    if (!socketService.current) {
+      console.log(`❌ [IMAGE-UPLOAD] Socket service not available`);
+      return;
+    }
+
+    console.log(`📸 [IMAGE-UPLOAD] File selected: ${file.name}, size: ${file.size} bytes, type: ${file.type}`);
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
+      console.log(`❌ [IMAGE-UPLOAD] Invalid file type: ${file.type}`);
       alert('Please select an image file');
       return;
     }
 
     // Validate file size (3MB)
     if (file.size > 3 * 1024 * 1024) {
+      console.log(`❌ [IMAGE-UPLOAD] File too large: ${file.size} bytes`);
       alert('Image must be smaller than 3MB');
       return;
     }
 
+    console.log(`📸 [IMAGE-UPLOAD] File validation passed, reading as data URL...`);
     const reader = new FileReader();
+    
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
+      console.log(`📸 [IMAGE-UPLOAD] File read complete, data URL length: ${dataUrl?.length}`);
       
       const messageData = {
         type: 'image' as const,
@@ -304,8 +321,15 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ currentUser: secretKey, onLogout })
         disappearingPhoto: disappearing
       };
 
+      console.log(`📸 [IMAGE-UPLOAD] Sending image message via socket...`);
       socketService.current?.sendMessage(messageData);
+      console.log(`📸 [IMAGE-UPLOAD] Image message sent!`);
     };
+    
+    reader.onerror = (error) => {
+      console.error(`❌ [IMAGE-UPLOAD] FileReader error:`, error);
+    };
+    
     reader.readAsDataURL(file);
 
     // Reset file inputs
