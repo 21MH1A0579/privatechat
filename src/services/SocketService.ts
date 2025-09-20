@@ -95,6 +95,7 @@ export class SocketService {
 
     // User events
     this.socket.on('user-joined', (data) => {
+      console.log(`👤 [SOCKET-SERVICE] Received user-joined event:`, data);
       this.emit('user-joined', data);
     });
 
@@ -103,6 +104,7 @@ export class SocketService {
     });
 
     this.socket.on('users-online', (data) => {
+      console.log(`👥 [SOCKET-SERVICE] Received users-online event:`, data);
       this.emit('users-online', data);
     });
 
@@ -187,10 +189,12 @@ export class SocketService {
       logger.error(SocketService.COMPONENT, `Cannot join - socket not connected`);
       return;
     }
+    console.log(`🏠 [CLIENT-JOIN] About to join chat room`);
     logger.info(SocketService.COMPONENT, `Joining chat room`, {
       socketId: this.socket.id
     });
     this.socket.emit('join');
+    console.log(`🏠 [CLIENT-JOIN] Join request sent`);
   }
 
   // Messaging

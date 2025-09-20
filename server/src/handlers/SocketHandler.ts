@@ -184,11 +184,7 @@ export class SocketHandler {
       console.log(`✅ [SOCKET-LOGIN] SUCCESS: User "${username}" logged in with secret key: "${secretKey}"`);
       socket.emit('login-success', { token, user: username });
       
-      // Broadcast online users to all clients
-      this.io.to('chat-room').emit('users-online', { 
-        users: Array.from(this.onlineUsers),
-        count: this.onlineUsers.size 
-      });
+      // Don't broadcast users-online here yet - wait until they join the room
       
       const duration = Date.now() - startTime;
       this.log('info', `Login successful`, {
@@ -228,16 +224,17 @@ export class SocketHandler {
     const messages = this.messageStore.getMessages();
     socket.emit('messages-history', messages);
 
-    // Send current online users
-    socket.emit('users-online', { 
+    // Broadcast updated online users to ALL clients in the room (including this one)
+    console.log(`👥 [JOIN] Broadcasting users-online to all clients:`, Array.from(this.onlineUsers));
+    this.io.to('chat-room').emit('users-online', { 
       users: Array.from(this.onlineUsers),
       count: this.onlineUsers.size 
     });
 
-    // Notify other users
+    // Notify other users that someone joined
     socket.to('chat-room').emit('user-joined', { user });
     
-    console.log(`👥 User ${user} joined chat room`);
+    console.log(`👥 User ${user} joined chat room with ${this.onlineUsers.size} total online`);
   }
 
   private handleMessage(socket: Socket, data: any): void {
